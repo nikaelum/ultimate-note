@@ -1,1 +1,1419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartDoc AI</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <style>
+        /* ═══════════════════════════════════════════
+           RESET & VARIABLES
+        ═══════════════════════════════════════════ */
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        :root {
+            --bg:       #e8eaed;
+            --surface:  #ffffff;
+            --border:   #dadce0;
+            --accent:   #1a73e8;
+            --accent2:  #1557b0;
+            --text:     #202124;
+            --muted:    #5f6368;
+            --success:  #1e8e3e;
+            --warning:  #f09c00;
+            --danger:   #d93025;
+            --ai:       #7c4dff;
+            --ai-light: #ede7f6;
+            --shadow:   0 1px 3px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.1);
+            --radius:   8px;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
 
+        /* ═══════════════════════════════════════════
+           TOP BAR
+        ═══════════════════════════════════════════ */
+        #top-bar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 16px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            z-index: 200;
+        }
+        #logo {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 17px; color: var(--accent);
+            white-space: nowrap; text-decoration: none;
+        }
+        #logo svg { width:28px; height:28px; }
+        #doc-title {
+            border: 1px solid transparent; border-radius: 6px;
+            padding: 5px 10px; font-size: 14px; font-weight: 500;
+            min-width: 180px; background: transparent; color: var(--text);
+            transition: border-color .2s;
+        }
+        #doc-title:focus { outline:none; border-color:var(--accent); background:white; }
+        .spacer { flex:1; }
+        .top-chip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 14px; border:none; border-radius: 20px;
+            cursor: pointer; font-size: 13px; font-weight: 500;
+            transition: all .2s; white-space: nowrap;
+        }
+        #btn-toggle-mode { background:#e8f0fe; color:var(--accent); }
+        #btn-toggle-mode:hover { background:#d2e3fc; }
+        #btn-print { background:var(--accent); color:white; }
+        #btn-print:hover { background:var(--accent2); }
+        #btn-api-key { background:var(--ai-light); color:var(--ai); }
+        #btn-api-key:hover { background:#d1c4e9; }
+
+        /* ═══════════════════════════════════════════
+           LAYOUT: sidebar + editor
+        ═══════════════════════════════════════════ */
+        #main-layout {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* ═══════════════════════════════════════════
+           AI SIDEBAR
+        ═══════════════════════════════════════════ */
+        #ai-sidebar {
+            width: 360px;
+            min-width: 320px;
+            max-width: 480px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        #sidebar-header {
+            padding: 14px 16px 10px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, #7c4dff11, #1a73e811);
+        }
+        #sidebar-header h2 {
+            font-size: 15px; font-weight: 700; color: var(--ai);
+            display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+        }
+        #sidebar-header p { font-size: 12px; color: var(--muted); }
+
+        #sidebar-body {
+            flex: 1; overflow-y: auto; padding: 14px 16px;
+            display: flex; flex-direction: column; gap: 14px;
+        }
+
+        /* Format controls panel */
+        .ctrl-panel {
+            background: #f8f9fa; border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 12px;
+        }
+        .ctrl-panel-title {
+            font-size: 11px; font-weight: 700; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px;
+        }
+        .ctrl-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+        }
+        .ctrl-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .ctrl-grid.cols-1 { grid-template-columns: 1fr; }
+
+        .ctrl-item label {
+            display: block; font-size: 11px; font-weight: 600;
+            color: var(--muted); margin-bottom: 3px;
+        }
+        .ctrl-item select,
+        .ctrl-item input[type="number"],
+        .ctrl-item input[type="text"] {
+            width: 100%; padding: 6px 8px;
+            border: 1px solid var(--border); border-radius: 5px;
+            font-size: 13px; color: var(--text); background: white;
+            transition: border-color .15s;
+        }
+        .ctrl-item select:focus,
+        .ctrl-item input:focus { outline:none; border-color:var(--accent); }
+
+        /* Margin mini-grid */
+        .margin-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 4px;
+        }
+        .margin-box .m-top    { grid-column:1/-1; }
+        .margin-box .m-bottom { grid-column:1/-1; }
+
+        /* AI Prompt area */
+        .prompt-label {
+            font-size: 12px; font-weight: 600; color: var(--text);
+            margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+        }
+        .prompt-label span { color:var(--ai); }
+
+        #ai-prompt {
+            width: 100%;
+            min-height: 120px;
+            max-height: 220px;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color .15s;
+            line-height: 1.5;
+            color: var(--text);
+        }
+        #ai-prompt:focus { outline:none; border-color:var(--ai); }
+        #ai-prompt::placeholder { color:#bbb; }
+
+        /* Instructions field */
+        #ai-instructions {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 12px; font-family: inherit;
+            resize: vertical; min-height: 56px; max-height: 120px;
+            color: var(--text); transition: border-color .15s;
+        }
+        #ai-instructions:focus { outline:none; border-color:var(--ai); }
+
+        /* Buttons */
+        .ai-btn {
+            display: flex; align-items: center; justify-content: center;
+            gap: 8px; width: 100%; padding: 10px;
+            border: none; border-radius: var(--radius);
+            cursor: pointer; font-size: 14px; font-weight: 600;
+            transition: all .2s; position: relative; overflow: hidden;
+        }
+        #btn-generate {
+            background: linear-gradient(135deg, var(--ai), #448aff);
+            color: white; box-shadow: 0 2px 8px rgba(124,77,255,.35);
+        }
+        #btn-generate:hover { box-shadow: 0 4px 14px rgba(124,77,255,.45); transform:translateY(-1px); }
+        #btn-generate:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+        #btn-generate-page {
+            background: linear-gradient(135deg, #00897b, #26a69a);
+            color: white; box-shadow: 0 2px 8px rgba(0,137,123,.3);
+            font-size: 13px; padding: 8px;
+        }
+        #btn-generate-page:hover { box-shadow: 0 4px 12px rgba(0,137,123,.4); transform:translateY(-1px); }
+        #btn-generate-page:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+        .btn-secondary {
+            background: white; color: var(--text);
+            border: 1px solid var(--border) !important;
+            border: none;
+            font-size: 13px; padding: 8px;
+        }
+        .btn-secondary:hover { background: #f1f3f4; }
+
+        /* AI Status */
+        #ai-status {
+            display: none;
+            align-items: center; gap: 10px;
+            padding: 10px 12px;
+            background: var(--ai-light);
+            border-radius: var(--radius);
+            font-size: 13px; color: var(--ai);
+        }
+        #ai-status.show { display: flex; }
+        .spinner {
+            width: 18px; height: 18px; border: 2px solid #d1c4e9;
+            border-top-color: var(--ai); border-radius: 50%;
+            animation: spin .7s linear infinite; flex-shrink: 0;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* Page list */
+        #page-list {
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .page-list-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 10px;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: white; cursor: pointer; transition: all .15s;
+            font-size: 13px;
+        }
+        .page-list-item:hover { border-color:var(--accent); background:#f0f4ff; }
+        .page-list-item.active { border-color:var(--accent); background:#e8f0fe; font-weight:600; }
+        .page-list-item .pg-num {
+            width: 22px; height: 22px; background: var(--accent);
+            color: white; border-radius: 50%; font-size: 11px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; flex-shrink:0;
+        }
+        .page-list-item .pg-name { flex:1; }
+        .pg-del {
+            opacity: 0; border:none; background:none; cursor:pointer;
+            color: var(--danger); font-size: 16px; line-height:1;
+            transition: opacity .15s;
+        }
+        .page-list-item:hover .pg-del { opacity:1; }
+        #btn-add-page {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px; border: 2px dashed #bbb; border-radius: 6px;
+            background: none; cursor: pointer; font-size: 13px;
+            color: var(--muted); transition: all .2s; width: 100%;
+        }
+        #btn-add-page:hover { border-color:var(--accent); color:var(--accent); background:#f0f4ff; }
+
+        /* ═══════════════════════════════════════════
+           EDITOR / CANVAS AREA
+        ═══════════════════════════════════════════ */
+        #canvas-area {
+            flex: 1; overflow-y: auto; background: var(--bg);
+            padding: 28px 24px 60px;
+            display: flex; flex-direction: column;
+            align-items: center; gap: 28px;
+        }
+
+        /* Page shell */
+        .doc-page {
+            background: white;
+            box-shadow: var(--shadow);
+            border-radius: 2px;
+            position: relative;
+            transition: box-shadow .2s;
+        }
+        .doc-page:hover { box-shadow: 0 2px 8px rgba(0,0,0,.18), 0 6px 20px rgba(0,0,0,.12); }
+
+        /* Sizes */
+        .doc-page.letter-portrait  { width:816px;  min-height:1056px; }
+        .doc-page.letter-landscape { width:1056px; min-height:816px;  }
+        .doc-page.a4-portrait      { width:794px;  min-height:1123px; }
+        .doc-page.a4-landscape     { width:1123px; min-height:794px;  }
+        .doc-page.legal-portrait   { width:816px;  min-height:1344px; }
+        .doc-page.legal-landscape  { width:1344px; min-height:816px;  }
+
+        /* Page content wrapper — handles margin/padding */
+        .page-inner {
+            width: 100%; height: 100%;
+            padding: 72px; /* default overridden by JS */
+            position: relative;
+        }
+
+        /* Rendered content */
+        .page-rendered {
+            width: 100%;
+            font-size: 12pt;
+            line-height: 1.6;
+            color: var(--text);
+            font-family: 'Georgia', serif;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            column-gap: 32px;
+        }
+        .page-rendered.cols-1 { column-count:1; }
+        .page-rendered.cols-2 { column-count:2; column-gap:32px; }
+        .page-rendered.cols-3 { column-count:3; column-gap:24px; }
+        .page-rendered.cols-4 { column-count:4; column-gap:18px; }
+
+        /* Editable raw input (edit mode) */
+        .page-raw {
+            width: 100%; min-height: 200px; outline: none;
+            font-size: 12pt; line-height: 1.6;
+            color: var(--text); font-family: 'Georgia', serif;
+            white-space: pre-wrap; word-wrap: break-word;
+            caret-color: var(--accent);
+        }
+        .page-raw:empty::before {
+            content: 'Paste raw text here, then click ✨ Generate…';
+            color: #bbb; font-style: italic; pointer-events: none;
+        }
+
+        /* Markdown in rendered area */
+        .page-rendered h1 { font-size:1.9em; font-weight:700; margin:.4em 0 .25em; border-bottom:2px solid #eee; padding-bottom:.15em; break-after:avoid; }
+        .page-rendered h2 { font-size:1.45em; font-weight:700; margin:.4em 0 .2em; border-bottom:1px solid #eee; padding-bottom:.1em; break-after:avoid; }
+        .page-rendered h3 { font-size:1.2em; font-weight:600; margin:.35em 0 .15em; break-after:avoid; }
+        .page-rendered h4, .page-rendered h5, .page-rendered h6 { font-size:1em; font-weight:600; margin:.3em 0 .15em; }
+        .page-rendered p  { margin:.35em 0; }
+        .page-rendered ul, .page-rendered ol { margin:.35em 0; padding-left:1.6em; }
+        .page-rendered li { margin:.2em 0; }
+        .page-rendered li p { margin:.05em 0; }
+        .page-rendered blockquote { border-left:3px solid var(--accent); margin:.5em 0; padding:.3em .8em; background:#f8f9fa; border-radius:0 4px 4px 0; color:var(--muted); }
+        .page-rendered code { font-family:'Courier New',monospace; background:#f1f3f4; padding:1px 4px; border-radius:3px; font-size:.87em; }
+        .page-rendered pre { background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; overflow-x:auto; margin:.5em 0; }
+        .page-rendered pre code { background:none; color:inherit; padding:0; }
+        .page-rendered table { border-collapse:collapse; width:100%; margin:.5em 0; font-size:.9em; }
+        .page-rendered th, .page-rendered td { border:1px solid #dadce0; padding:5px 10px; text-align:left; }
+        .page-rendered th { background:#f8f9fa; font-weight:600; }
+        .page-rendered tr:nth-child(even) { background:#fafafa; }
+        .page-rendered hr { border:none; border-top:1px solid #dadce0; margin:.7em 0; }
+        .page-rendered strong { font-weight:700; }
+        .page-rendered em { font-style:italic; }
+        .page-rendered a { color:var(--accent); text-decoration:none; }
+        .page-rendered a:hover { text-decoration:underline; }
+        .page-rendered .katex-block { display:block; text-align:center; margin:.6em 0; overflow-x:auto; }
+        .page-rendered .katex { font-size:1em; }
+        .page-rendered .katex-inline { display:inline !important; vertical-align:middle; }
+        .math-error { color:#c62828; background:#ffebee; border:1px solid #ef9a9a; border-radius:3px; padding:1px 5px; font-family:'Courier New',monospace; font-size:.82em; }
+
+        /* Page label */
+        .page-label {
+            font-size: 11px; color: var(--muted); font-weight:500;
+            letter-spacing:.4px; margin-bottom:6px; text-align:center;
+        }
+
+        /* Page wrapper */
+        .page-slot { display:flex; flex-direction:column; align-items:center; }
+
+        /* AI generating overlay */
+        .page-generating {
+            position: absolute; inset: 0; background: rgba(255,255,255,.85);
+            display: none; align-items: center; justify-content: center;
+            flex-direction: column; gap: 12px; border-radius: 2px; z-index: 10;
+        }
+        .page-generating.show { display:flex; }
+        .page-generating .gen-spinner {
+            width: 40px; height: 40px; border: 3px solid #e0d4fb;
+            border-top-color: var(--ai); border-radius: 50%;
+            animation: spin .8s linear infinite;
+        }
+        .page-generating p { font-size:14px; color:var(--ai); font-weight:600; }
+
+        /* ═══════════════════════════════════════════
+           MODAL (API KEY)
+        ═══════════════════════════════════════════ */
+        .modal-bg {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,.45); z-index: 1000;
+            align-items: center; justify-content: center; backdrop-filter:blur(3px);
+        }
+        .modal-bg.show { display:flex; }
+        .modal-box {
+            background: white; border-radius: 12px;
+            box-shadow: 0 8px 40px rgba(0,0,0,.25);
+            padding: 28px; width: 440px; max-width: 95vw;
+            animation: popIn .2s ease;
+        }
+        @keyframes popIn { from{transform:scale(.94);opacity:0;} to{transform:scale(1);opacity:1;} }
+        .modal-box h3 { font-size:17px; font-weight:700; margin-bottom:6px; }
+        .modal-box p  { font-size:13px; color:var(--muted); margin-bottom:16px; }
+        .modal-box input {
+            width:100%; padding:10px 12px; border:1px solid var(--border);
+            border-radius:7px; font-size:14px; color:var(--text);
+            font-family:monospace; transition:border-color .15s;
+        }
+        .modal-box input:focus { outline:none; border-color:var(--ai); }
+        .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+        .modal-actions button {
+            padding:8px 20px; border-radius:7px; cursor:pointer;
+            font-size:14px; font-weight:500; border:none;
+        }
+        #btn-save-key { background:var(--ai); color:white; }
+        #btn-save-key:hover { background:#6a3de8; }
+        #btn-cancel-key { background:#f1f3f4; color:var(--text); }
+        #btn-cancel-key:hover { background:#e0e0e0; }
+        .key-note { font-size:11px; color:var(--muted); margin-top:10px; }
+        .key-note a { color:var(--ai); }
+
+        /* ═══════════════════════════════════════════
+           TOAST
+        ═══════════════════════════════════════════ */
+        #toast {
+            position: fixed; bottom:28px; left:50%;
+            transform: translateX(-50%) translateY(16px);
+            background: #323232; color: white;
+            padding: 10px 22px; border-radius: 24px;
+            font-size: 13px; opacity: 0; pointer-events:none;
+            transition: all .3s; z-index: 9999;
+        }
+        #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+        /* ═══════════════════════════════════════════
+           STATUS BAR
+        ═══════════════════════════════════════════ */
+        #status-bar {
+            background: white; border-top: 1px solid var(--border);
+            padding: 3px 16px; display: flex; align-items: center;
+            justify-content: space-between; font-size: 11px;
+            color: var(--muted); flex-shrink: 0;
+        }
+        .status-l, .status-r { display:flex; align-items:center; gap:14px; }
+        .badge {
+            padding: 1px 8px; border-radius:10px;
+            font-size: 10px; font-weight:700;
+        }
+        .badge.edit    { background:#fef7e0; color:#f09c00; }
+        .badge.preview { background:#e6f4ea; color:#1e8e3e; }
+        .badge.ai      { background:var(--ai-light); color:var(--ai); }
+
+        /* ═══════════════════════════════════════════
+           PRINT
+        ═══════════════════════════════════════════ */
+        @media print {
+            *, *::before, *::after {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            html, body { background:white !important; overflow:visible !important; height:auto !important; display:block !important; }
+            #top-bar, #ai-sidebar, #status-bar { display:none !important; }
+            #main-layout { display:block !important; overflow:visible !important; height:auto !important; }
+            #canvas-area  { display:block !important; overflow:visible !important; height:auto !important; padding:0 !important; background:white !important; transform:none !important; }
+            .page-slot { display:block !important; margin:0 !important; }
+            .page-label { display:none !important; }
+            .doc-page {
+                box-shadow:none !important; border-radius:0 !important;
+                width:100% !important; min-height:0 !important;
+                break-after:page !important; page-break-after:always !important;
+            }
+            .page-slot:last-child .doc-page { break-after:auto !important; page-break-after:auto !important; }
+            .page-inner { padding:0 !important; }
+            .page-raw      { display:none !important; }
+            .page-rendered { display:block !important; }
+            .page-generating { display:none !important; }
+        }
+
+        /* Scrollbars */
+        #canvas-area::-webkit-scrollbar, #sidebar-body::-webkit-scrollbar { width:6px; }
+        #canvas-area::-webkit-scrollbar-track, #sidebar-body::-webkit-scrollbar-track { background:transparent; }
+        #canvas-area::-webkit-scrollbar-thumb, #sidebar-body::-webkit-scrollbar-thumb { background:#c1c1c1; border-radius:3px; }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════ TOP BAR ═══ -->
+<div id="top-bar">
+    <a id="logo" href="#">
+        <svg viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="7" fill="#1a73e8"/>
+            <rect x="7" y="8"  width="14" height="2.5" rx="1.25" fill="white"/>
+            <rect x="7" y="13" width="14" height="2.5" rx="1.25" fill="white"/>
+            <rect x="7" y="18" width="9"  height="2.5" rx="1.25" fill="white"/>
+            <circle cx="22" cy="22" r="6" fill="#7c4dff"/>
+            <text x="22" y="26" text-anchor="middle" font-size="8" fill="white" font-weight="bold">AI</text>
+        </svg>
+        SmartDoc <span style="color:var(--ai);margin-left:2px;">AI</span>
+    </a>
+    <input type="text" id="doc-title" value="Untitled Document" spellcheck="false">
+    <div class="spacer"></div>
+    <button class="top-chip" id="btn-api-key" onclick="openApiModal()">🔑 API Key</button>
+    <button class="top-chip" id="btn-toggle-mode" onclick="toggleMode()">
+        👁 <span id="mode-label">Preview Mode</span>
+    </button>
+    <button class="top-chip" id="btn-print" onclick="printDoc()">🖨️ Print</button>
+</div>
+
+<!-- ═══════════════════════════════════ LAYOUT ═══ -->
+<div id="main-layout">
+
+    <!-- ══════════ AI SIDEBAR ══════════ -->
+    <div id="ai-sidebar">
+        <div id="sidebar-header">
+            <h2>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="#7c4dff"/>
+                </svg>
+                Gemini AI Formatter
+            </h2>
+            <p>Paste raw text → AI formats it beautifully</p>
+        </div>
+
+        <div id="sidebar-body">
+
+            <!-- ── FORMAT CONTROLS ── -->
+            <div class="ctrl-panel">
+                <div class="ctrl-panel-title">📄 Page Setup</div>
+                <div class="ctrl-grid">
+                    <div class="ctrl-item">
+                        <label>Paper Size</label>
+                        <select id="ctrl-paper">
+                            <option value="letter">Letter</option>
+                            <option value="a4" selected>A4</option>
+                            <option value="legal">Legal</option>
+                        </select>
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Orientation</label>
+                        <select id="ctrl-orient">
+                            <option value="portrait" selected>Portrait</option>
+                            <option value="landscape">Landscape</option>
+                        </select>
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Columns</label>
+                        <select id="ctrl-cols">
+                            <option value="1" selected>1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Line Spacing</label>
+                        <input type="number" id="ctrl-spacing" value="1.6" min="0.8" max="4" step="0.1">
+                    </div>
+                </div>
+            </div>
+
+            <div class="ctrl-panel">
+                <div class="ctrl-panel-title">🔤 Typography</div>
+                <div class="ctrl-grid cols-1">
+                    <div class="ctrl-item">
+                        <label>Font Family</label>
+                        <select id="ctrl-font">
+                            <option value="Georgia, serif">Georgia</option>
+                            <option value="'Times New Roman', serif">Times New Roman</option>
+                            <option value="Arial, sans-serif">Arial</option>
+                            <option value="'Helvetica Neue', sans-serif">Helvetica</option>
+                            <option value="'Courier New', monospace">Courier New</option>
+                            <option value="Verdana, sans-serif">Verdana</option>
+                            <option value="Garamond, serif">Garamond</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="ctrl-grid" style="margin-top:8px;">
+                    <div class="ctrl-item">
+                        <label>Font Size (pt)</label>
+                        <input type="number" id="ctrl-fontsize" value="12" min="6" max="72">
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Heading Scale</label>
+                        <select id="ctrl-heading-scale">
+                            <option value="normal">Normal</option>
+                            <option value="large">Large</option>
+                            <option value="small">Small (compact)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ctrl-panel">
+                <div class="ctrl-panel-title">📐 Margins (px)</div>
+                <div class="ctrl-grid">
+                    <div class="ctrl-item">
+                        <label>Top</label>
+                        <input type="number" id="ctrl-mt" value="72" min="0" max="200">
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Bottom</label>
+                        <input type="number" id="ctrl-mb" value="72" min="0" max="200">
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Left</label>
+                        <input type="number" id="ctrl-ml" value="72" min="0" max="200">
+                    </div>
+                    <div class="ctrl-item">
+                        <label>Right</label>
+                        <input type="number" id="ctrl-mr" value="72" min="0" max="200">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── AI PROMPT ── -->
+            <div>
+                <div class="prompt-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="#7c4dff"/>
+                    </svg>
+                    <span>Paste your raw text here</span>
+                </div>
+                <textarea id="ai-prompt"
+                    placeholder="Paste any raw text, notes, equations, bullet points, markdown, LaTeX — anything. The AI will format it into a beautiful document.
+
+Example:
+Simple Interest Formula
+I = P * i * n
+where P is principal, i is rate, n is time..."></textarea>
+            </div>
+
+            <div>
+                <div class="prompt-label" style="margin-bottom:5px;">
+                    💬 <span style="color:var(--muted);font-size:11px;">Extra instructions (optional)</span>
+                </div>
+                <textarea id="ai-instructions"
+                    placeholder="E.g.: Make it academic style. Add section numbers. Highlight key formulas. Use formal tone..."></textarea>
+            </div>
+
+            <!-- ── ACTION BUTTONS ── -->
+            <div id="ai-status">
+                <div class="spinner"></div>
+                <span id="ai-status-text">Gemini is formatting your document…</span>
+            </div>
+
+            <button class="ai-btn" id="btn-generate" onclick="generateAllPages()">
+                ✨ Generate / Format Document
+            </button>
+
+            <button class="ai-btn btn-secondary" id="btn-generate-page" onclick="generateCurrentPage()">
+                📄 Format Current Page Only
+            </button>
+
+            <button class="ai-btn btn-secondary" onclick="applySettingsOnly()">
+                🔄 Apply Settings (no AI)
+            </button>
+
+            <!-- ── PAGE MANAGER ── -->
+            <div class="ctrl-panel">
+                <div class="ctrl-panel-title">📑 Pages</div>
+                <div id="page-list"></div>
+                <button id="btn-add-page" onclick="addPage()" style="margin-top:8px;">
+                    ＋ Add Page
+                </button>
+            </div>
+
+        </div><!-- /sidebar-body -->
+    </div><!-- /ai-sidebar -->
+
+    <!-- ══════════ CANVAS ══════════ -->
+    <div id="canvas-area">
+        <!-- Pages injected here -->
+    </div>
+
+</div><!-- /main-layout -->
+
+<!-- ═══════════════════════════════════ STATUS BAR ═══ -->
+<div id="status-bar">
+    <div class="status-l">
+        <span id="sb-mode" class="badge edit">✏️ Edit</span>
+        <span id="sb-pages">0 pages</span>
+        <span id="sb-words">0 words</span>
+    </div>
+    <div class="status-r">
+        <span id="sb-model" style="color:var(--ai);">✦ gemini-2.0-flash-lite</span>
+        <span id="sb-save">● Ready</span>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════ API KEY MODAL ═══ -->
+<div class="modal-bg" id="api-modal">
+    <div class="modal-box">
+        <h3>🔑 Gemini API Key</h3>
+        <p>Your key is stored only in your browser (localStorage) and never sent anywhere except directly to Google's Gemini API.</p>
+        <input type="password" id="api-key-input" placeholder="AIzaSy…" autocomplete="off">
+        <div class="key-note">
+            Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a>
+        </div>
+        <div class="modal-actions">
+            <button id="btn-cancel-key" onclick="closeApiModal()">Cancel</button>
+            <button id="btn-save-key"   onclick="saveApiKey()">Save Key</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const S = {
+    mode:        'edit',   // 'edit' | 'preview'
+    apiKey:      '',
+    model:       'gemini-2.0-flash-lite',
+    pageCount:   0,
+    activePage:  1,
+    pages:       [],       // array of { id, rawText, renderedHTML }
+    settings: {
+        paper:    'a4',
+        orient:   'portrait',
+        cols:     1,
+        font:     'Georgia, serif',
+        fontSize: 12,
+        spacing:  1.6,
+        mt: 72, mb: 72, ml: 72, mr: 72,
+        headingScale: 'normal',
+    }
+};
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+    S.apiKey = localStorage.getItem('sd_api_key') || '';
+    addPage();
+    syncSettingsFromUI();
+    updateStatus();
+    // If no key, prompt
+    if (!S.apiKey) setTimeout(openApiModal, 800);
+});
+
+// ═══════════════════════════════════════════════════════════
+// SETTINGS SYNC
+// ═══════════════════════════════════════════════════════════
+function syncSettingsFromUI() {
+    S.settings.paper    = v('ctrl-paper');
+    S.settings.orient   = v('ctrl-orient');
+    S.settings.cols     = parseInt(v('ctrl-cols'));
+    S.settings.font     = v('ctrl-font');
+    S.settings.fontSize = parseFloat(v('ctrl-fontsize')) || 12;
+    S.settings.spacing  = parseFloat(v('ctrl-spacing'))  || 1.6;
+    S.settings.mt       = parseInt(v('ctrl-mt')) || 72;
+    S.settings.mb       = parseInt(v('ctrl-mb')) || 72;
+    S.settings.ml       = parseInt(v('ctrl-ml')) || 72;
+    S.settings.mr       = parseInt(v('ctrl-mr')) || 72;
+    S.settings.headingScale = v('ctrl-heading-scale');
+}
+function v(id) { return document.getElementById(id)?.value || ''; }
+
+// ═══════════════════════════════════════════════════════════
+// API KEY MODAL
+// ═══════════════════════════════════════════════════════════
+function openApiModal() {
+    document.getElementById('api-key-input').value = S.apiKey;
+    document.getElementById('api-modal').classList.add('show');
+}
+function closeApiModal() {
+    document.getElementById('api-modal').classList.remove('show');
+}
+function saveApiKey() {
+    const key = document.getElementById('api-key-input').value.trim();
+    if (!key) { toast('⚠ Please enter your API key'); return; }
+    S.apiKey = key;
+    localStorage.setItem('sd_api_key', key);
+    closeApiModal();
+    toast('✅ API key saved');
+}
+
+// ═══════════════════════════════════════════════════════════
+// MATH HELPERS (same robust engine as before)
+// ═══════════════════════════════════════════════════════════
+function extractAndProtectMath(raw) {
+    const store = [], ph = n => `\x02M${n}\x03`;
+
+    raw = raw.replace(/\$\$([\s\S]+?)\$\$/g, (_, src) => {
+        const id = store.length; store.push({type:'display',src}); return ph(id);
+    });
+    raw = raw.replace(/\\\[([\s\S]+?)\\\]/g, (_, src) => {
+        const id = store.length; store.push({type:'display',src}); return ph(id);
+    });
+    raw = raw.replace(/\\\((.+?)\\\)/g, (_, src) => {
+        const id = store.length; store.push({type:'inline',src:src.trim()}); return ph(id);
+    });
+    raw = protectInlineDollar(raw, store);
+    return { text: raw, store };
+}
+
+function protectInlineDollar(text, store) {
+    const ph = n => `\x02M${n}\x03`;
+    let result = '', i = 0;
+    while (i < text.length) {
+        if (text[i] === '\x02') {
+            const end = text.indexOf('\x03', i);
+            if (end !== -1) { result += text.slice(i, end+1); i = end+1; continue; }
+        }
+        if (text[i] !== '$') { result += text[i++]; continue; }
+        if (i > 0 && text[i-1] === '\\') { result += text[i++]; continue; }
+        if (i > 0 && /[\w₱€£¥₩]/.test(text[i-1])) { result += text[i++]; continue; }
+        const after = text[i+1];
+        if (!after || after==='$'||after==='\n'||after===' ') { result += text[i++]; continue; }
+        const lineEnd  = text.indexOf('\n', i+1);
+        const lineSlice = lineEnd===-1 ? text.slice(i+1) : text.slice(i+1,lineEnd);
+        const closeIdx  = findCloseDollar(lineSlice);
+        if (closeIdx === -1) { result += text[i++]; continue; }
+        const inner = lineSlice.slice(0, closeIdx).trim();
+        if (!inner || !isMath(inner)) { result += text[i++]; continue; }
+        const id = store.length; store.push({type:'inline',src:inner});
+        result += ph(id); i += 1 + closeIdx + 1;
+    }
+    return result;
+}
+function findCloseDollar(str) {
+    for (let j=0;j<str.length;j++) if(str[j]==='$'&&(j===0||str[j-1]!=='\\')) return j;
+    return -1;
+}
+function isMath(s) {
+    if (!s?.trim()) return false;
+    if (/^[\d,.\s]+$/.test(s)) return false;
+    if (/^[a-zA-Z]$/.test(s.trim())) return true;
+    return /\\|\{|\}|\^|_|[+\-*/=<>|]|[a-zA-Z]\d|\d[a-zA-Z]|[a-zA-Z]{2,}/.test(s);
+}
+function restoreMath(html, store) {
+    return html.replace(/\x02M(\d+)\x03/g, (_, idx) => {
+        const {type,src} = store[parseInt(idx)];
+        try {
+            const r = katex.renderToString(src.trim(), {displayMode:type==='display', throwOnError:true, strict:false});
+            return type==='display'
+                ? `<div class="katex-block">${r}</div>`
+                : `<span class="katex-inline">${r}</span>`;
+        } catch {
+            return `<span class="math-error">[Math: ${esc(src)}]</span>`;
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+// MARKDOWN → HTML RENDERER
+// ═══════════════════════════════════════════════════════════
+function renderMarkdown(mdText) {
+    if (!mdText?.trim()) return '';
+    let raw = mdText.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    const { text: protected_, store } = extractAndProtectMath(raw);
+    marked.use({ breaks:true, gfm:true, mangle:false, headerIds:false });
+    let html = '';
+    try   { html = marked.parse(protected_); }
+    catch { html = `<pre>${esc(protected_)}</pre>`; }
+    return restoreMath(html, store);
+}
+
+// ═══════════════════════════════════════════════════════════
+// GEMINI API CALL
+// ═══════════════════════════════════════════════════════════
+async function callGemini(prompt) {
+    if (!S.apiKey) {
+        openApiModal();
+        throw new Error('No API key set');
+    }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${S.model}:generateContent?key=${S.apiKey}`;
+    const body = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 8192,
+        }
+    };
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ═══════════════════════════════════════════════════════════
+// BUILD THE SYSTEM PROMPT
+// ═══════════════════════════════════════════════════════════
+function buildPrompt(rawText, instructions = '') {
+    const st = S.settings;
+    const colsDesc = st.cols === 1 ? 'single column' :
+                     st.cols === 2 ? 'two columns' :
+                     st.cols === 3 ? 'three columns' : 'four columns';
+
+    const headingNote = st.headingScale === 'large'   ? 'Use large, prominent headings.' :
+                        st.headingScale === 'small'   ? 'Use compact, smaller headings.' :
+                                                        'Use standard heading sizes.';
+
+    return `You are an expert document formatter. Your job is to take raw input text and convert it into beautifully formatted Markdown with proper LaTeX math notation.
+
+DOCUMENT SETTINGS:
+- Paper: ${st.paper.toUpperCase()} ${st.orient}
+- Layout: ${colsDesc}
+- Font: ${st.font} at ${st.fontSize}pt
+- Line spacing: ${st.spacing}
+- Margins: top=${st.mt}px, bottom=${st.mb}px, left=${st.ml}px, right=${st.mr}px
+- ${headingNote}
+
+FORMATTING RULES — follow these exactly:
+1. Output ONLY valid Markdown. No prose explanation, no code fences around the whole output.
+2. For ALL mathematical expressions, use LaTeX:
+   - Inline math: $expression$ (e.g., $E = mc^2$, $n = 3$, $P = ₱15{,}000$)
+   - Display/block math: $$\\nexpression\\n$$ on its own lines
+   - Variables like P, F, i, n used in math context → wrap in $...$
+   - Equations with = signs → use display math $$...$$
+3. Currency amounts like ₱15,000 or $100 that are NOT math → leave as plain text
+4. Structure the document with clear headings (##, ###)
+5. Use bullet lists (- item) and numbered lists (1. item) appropriately
+6. Bold (**text**) key terms, formulas, and answers
+7. Use > blockquotes for important notes or theorems
+8. If there are step-by-step solutions, number each step clearly
+9. Keep content within approximately ${estimatePageLines(st)} lines per page to avoid overflow
+10. Separate distinct problems or sections with ---
+${instructions ? `\nADDITIONAL INSTRUCTIONS:\n${instructions}` : ''}
+
+RAW INPUT TEXT TO FORMAT:
+---
+${rawText}
+---
+
+Output the formatted Markdown now:`;
+}
+
+function estimatePageLines(st) {
+    const dims = { 'letter':1056, 'a4':1123, 'legal':1344 };
+    const pageH = dims[st.paper] || 1123;
+    const contentH = pageH - st.mt - st.mb;
+    const lineH = st.fontSize * 1.33333 * st.spacing; // pt to px approx
+    return Math.floor(contentH / lineH);
+}
+
+// ═══════════════════════════════════════════════════════════
+// MULTI-PAGE SPLIT
+// The AI returns one big markdown string. We split it into
+// page-sized chunks by measuring rendered height.
+// ═══════════════════════════════════════════════════════════
+function splitIntoPages(fullMarkdown) {
+    syncSettingsFromUI();
+    const st = S.settings;
+
+    const dims = {
+        'letter-portrait' :{w:816,h:1056}, 'letter-landscape':{w:1056,h:816},
+        'a4-portrait'     :{w:794,h:1123}, 'a4-landscape'    :{w:1123,h:794},
+        'legal-portrait'  :{w:816,h:1344}, 'legal-landscape' :{w:1344,h:816},
+    };
+    const key = `${st.paper}-${st.orient}`;
+    const dim = dims[key] || dims['a4-portrait'];
+    const contentW = dim.w - st.ml - st.mr;
+    const contentH = dim.h - st.mt - st.mb;
+
+    // Split markdown by lines, then accumulate into pages
+    const lines  = fullMarkdown.split('\n');
+    const pages  = [];
+    let   chunk  = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        chunk.push(lines[i]);
+        const h = measureMdHeight(chunk.join('\n'), contentW, st);
+        if (h > contentH && chunk.length > 1) {
+            // Last line caused overflow — save without it
+            const pageContent = chunk.slice(0, -1).join('\n');
+            pages.push(pageContent.trim());
+            chunk = [lines[i]]; // start new page with current line
+        }
+    }
+    // Remaining
+    if (chunk.join('\n').trim()) pages.push(chunk.join('\n').trim());
+
+    return pages.length ? pages : [fullMarkdown];
+}
+
+function measureMdHeight(md, width, st) {
+    const html = renderMarkdown(md);
+    const ghost = document.createElement('div');
+    ghost.style.cssText = `
+        position:absolute; visibility:hidden; top:-99999px; left:0;
+        width:${width}px;
+        font-family:${st.font}; font-size:${st.fontSize}pt;
+        line-height:${st.spacing};
+        column-count:${st.cols}; column-gap:32px;
+        word-wrap:break-word; overflow-wrap:break-word;
+        padding:0; margin:0;
+    `;
+    ghost.innerHTML = html;
+    document.body.appendChild(ghost);
+    const h = ghost.scrollHeight;
+    document.body.removeChild(ghost);
+    return h;
+}
+
+// ═══════════════════════════════════════════════════════════
+// GENERATE — ALL PAGES
+// ═══════════════════════════════════════════════════════════
+async function generateAllPages() {
+    syncSettingsFromUI();
+    const rawText    = document.getElementById('ai-prompt').value.trim();
+    const extraInstr = document.getElementById('ai-instructions').value.trim();
+
+    if (!rawText) { toast('⚠ Please paste some text first'); return; }
+    if (!S.apiKey) { openApiModal(); return; }
+
+    setGenerating(true, 'Gemini is formatting your document…');
+
+    try {
+        const prompt   = buildPrompt(rawText, extraInstr);
+        const mdResult = await callGemini(prompt);
+
+        if (!mdResult?.trim()) throw new Error('Empty response from Gemini');
+
+        // Split into pages
+        const pageChunks = splitIntoPages(mdResult);
+
+        // Clear existing pages and rebuild
+        clearAllPages();
+        for (let i = 0; i < pageChunks.length; i++) {
+            const pid = (i === 0) ? addPage() : addPage();
+            setPageContent(pid, pageChunks[i], renderMarkdown(pageChunks[i]));
+        }
+
+        // Switch to preview mode
+        if (S.mode !== 'preview') toggleMode();
+        else applyAllPageStyles();
+
+        toast(`✅ Done! ${pageChunks.length} page${pageChunks.length!==1?'s':''} generated`);
+    } catch(err) {
+        console.error(err);
+        toast(`❌ Error: ${err.message}`);
+    } finally {
+        setGenerating(false);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// GENERATE — CURRENT PAGE ONLY
+// ═══════════════════════════════════════════════════════════
+async function generateCurrentPage() {
+    syncSettingsFromUI();
+    const rawText    = document.getElementById('ai-prompt').value.trim();
+    const extraInstr = document.getElementById('ai-instructions').value.trim();
+
+    if (!rawText) { toast('⚠ Please paste some text first'); return; }
+    if (!S.apiKey) { openApiModal(); return; }
+
+    // Show spinner on active page
+    const pageEl = document.querySelector(`.doc-page[data-pid="${S.activePage}"]`);
+    const overlay = pageEl?.querySelector('.page-generating');
+    if (overlay) overlay.classList.add('show');
+
+    setGenerating(true, `Formatting page ${S.activePage}…`);
+
+    try {
+        const prompt   = buildPrompt(rawText, extraInstr);
+        const mdResult = await callGemini(prompt);
+        if (!mdResult?.trim()) throw new Error('Empty response from Gemini');
+
+        const html = renderMarkdown(mdResult);
+        setPageContent(S.activePage, mdResult, html);
+        applyPageStyle(S.activePage);
+
+        if (S.mode !== 'preview') toggleMode();
+        toast(`✅ Page ${S.activePage} formatted`);
+    } catch(err) {
+        console.error(err);
+        toast(`❌ Error: ${err.message}`);
+    } finally {
+        if (overlay) overlay.classList.remove('show');
+        setGenerating(false);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// APPLY SETTINGS WITHOUT AI (re-render existing markdown)
+// ═══════════════════════════════════════════════════════════
+function applySettingsOnly() {
+    syncSettingsFromUI();
+    S.pages.forEach(pg => {
+        if (pg.rawText) {
+            pg.renderedHTML = renderMarkdown(pg.rawText);
+        }
+        applyPageStyle(pg.id);
+        const rendered = document.querySelector(`.page-rendered[data-pid="${pg.id}"]`);
+        if (rendered && pg.renderedHTML) rendered.innerHTML = pg.renderedHTML;
+    });
+    toast('✅ Settings applied');
+}
+
+// ═══════════════════════════════════════════════════════════
+// PAGE MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+function addPage(focusIt = true) {
+    S.pageCount++;
+    const pid = S.pageCount;
+    S.pages.push({ id: pid, rawText: '', renderedHTML: '' });
+
+    const area = document.getElementById('canvas-area');
+    const st   = S.settings;
+
+    // Slot
+    const slot = document.createElement('div');
+    slot.className   = 'page-slot';
+    slot.dataset.pid = pid;
+
+    // Label
+    const lbl = document.createElement('div');
+    lbl.className   = 'page-label';
+    lbl.textContent = `PAGE ${pid}`;
+
+    // Page shell
+    const page = document.createElement('div');
+    page.className   = `doc-page ${pageClass()}`;
+    page.dataset.pid = pid;
+
+    // Inner
+    const inner = document.createElement('div');
+    inner.className    = 'page-inner';
+    inner.style.padding = `${st.mt}px ${st.mr}px ${st.mb}px ${st.ml}px`;
+
+    // Editable raw
+    const raw = document.createElement('div');
+    raw.className       = 'page-raw';
+    raw.contentEditable = 'true';
+    raw.dataset.pid     = pid;
+    raw.style.cssText   = `font-family:${st.font};font-size:${st.fontSize}pt;line-height:${st.spacing};`;
+    raw.addEventListener('input', () => {
+        const pg = S.pages.find(p=>p.id===pid);
+        if (pg) pg.rawText = raw.innerText;
+        updateStatus();
+    });
+    raw.addEventListener('focus', () => { S.activePage = pid; highlightPageList(pid); });
+    raw.addEventListener('paste', e => handleRawPaste(e, raw, pid));
+
+    // Rendered preview
+    const rendered = document.createElement('div');
+    rendered.className    = `page-rendered cols-${st.cols}`;
+    rendered.dataset.pid  = pid;
+    rendered.style.cssText = `display:none;font-family:${st.font};font-size:${st.fontSize}pt;line-height:${st.spacing};`;
+
+    // AI generating overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'page-generating';
+    overlay.innerHTML = '<div class="gen-spinner"></div><p>Gemini is formatting…</p>';
+
+    inner.appendChild(raw);
+    inner.appendChild(rendered);
+    inner.appendChild(overlay);
+    page.appendChild(inner);
+    slot.appendChild(lbl);
+    slot.appendChild(page);
+
+    // Insert before any existing add-button or append
+    area.appendChild(slot);
+
+    S.activePage = pid;
+    updatePageList();
+    updateStatus();
+
+    if (S.mode === 'preview') {
+        raw.style.display      = 'none';
+        rendered.style.display = 'block';
+    }
+
+    if (focusIt) setTimeout(() => raw.focus(), 50);
+    return pid;
+}
+
+function clearAllPages() {
+    document.getElementById('canvas-area').innerHTML = '';
+    S.pages     = [];
+    S.pageCount = 0;
+}
+
+function deletePage(pid) {
+    if (S.pages.length <= 1) { toast('Cannot delete the only page'); return; }
+    const slot = document.querySelector(`.page-slot[data-pid="${pid}"]`);
+    slot?.remove();
+    S.pages = S.pages.filter(p => p.id !== pid);
+    if (S.activePage === pid) S.activePage = S.pages[0]?.id || 1;
+    updatePageList();
+    updateStatus();
+}
+
+function setPageContent(pid, rawText, renderedHTML) {
+    const pg = S.pages.find(p => p.id === pid);
+    if (pg) { pg.rawText = rawText; pg.renderedHTML = renderedHTML; }
+
+    const raw      = document.querySelector(`.page-raw[data-pid="${pid}"]`);
+    const rendered = document.querySelector(`.page-rendered[data-pid="${pid}"]`);
+    if (raw)      raw.innerText     = rawText;
+    if (rendered) rendered.innerHTML = renderedHTML;
+}
+
+function applyPageStyle(pid) {
+    const st = S.settings;
+    const page = document.querySelector(`.doc-page[data-pid="${pid}"]`);
+    if (page) page.className = `doc-page ${pageClass()}`;
+
+    const inner = page?.querySelector('.page-inner');
+    if (inner) inner.style.padding = `${st.mt}px ${st.mr}px ${st.mb}px ${st.ml}px`;
+
+    const raw = document.querySelector(`.page-raw[data-pid="${pid}"]`);
+    if (raw) raw.style.cssText = `font-family:${st.font};font-size:${st.fontSize}pt;line-height:${st.spacing};`;
+
+    const rendered = document.querySelector(`.page-rendered[data-pid="${pid}"]`);
+    if (rendered) {
+        rendered.className    = `page-rendered cols-${st.cols}`;
+        rendered.style.cssText = `${S.mode==='preview'?'display:block':'display:none'};font-family:${st.font};font-size:${st.fontSize}pt;line-height:${st.spacing};`;
+    }
+}
+
+function applyAllPageStyles() {
+    S.pages.forEach(pg => applyPageStyle(pg.id));
+    // Update page class on all doc-page shells
+    document.querySelectorAll('.doc-page').forEach(el => {
+        el.className = `doc-page ${pageClass()}`;
+    });
+}
+
+function pageClass() {
+    return `${S.settings.paper}-${S.settings.orient}`;
+}
+
+function updatePageList() {
+    const list = document.getElementById('page-list');
+    list.innerHTML = '';
+    S.pages.forEach((pg, i) => {
+        const item = document.createElement('div');
+        item.className = `page-list-item${pg.id === S.activePage ? ' active' : ''}`;
+        item.dataset.pid = pg.id;
+        item.innerHTML = `
+            <span class="pg-num">${i+1}</span>
+            <span class="pg-name">Page ${i+1}</span>
+            <button class="pg-del" onclick="event.stopPropagation();deletePage(${pg.id})" title="Delete">×</button>`;
+        item.addEventListener('click', () => {
+            S.activePage = pg.id;
+            highlightPageList(pg.id);
+            document.querySelector(`.page-slot[data-pid="${pg.id}"]`)
+                ?.scrollIntoView({ behavior:'smooth', block:'center' });
+        });
+        list.appendChild(item);
+    });
+}
+
+function highlightPageList(pid) {
+    document.querySelectorAll('.page-list-item').forEach(el => {
+        el.classList.toggle('active', parseInt(el.dataset.pid) === pid);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODE TOGGLE (edit ↔ preview)
+// ═══════════════════════════════════════════════════════════
+function toggleMode() {
+    syncSettingsFromUI();
+    if (S.mode === 'edit') {
+        S.mode = 'preview';
+        document.querySelectorAll('.page-raw').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.page-rendered').forEach(el => el.style.display = 'block');
+        document.getElementById('mode-label').textContent = 'Edit Mode';
+        document.getElementById('sb-mode').textContent    = '👁 Preview';
+        document.getElementById('sb-mode').className      = 'badge preview';
+    } else {
+        S.mode = 'edit';
+        document.querySelectorAll('.page-raw').forEach(el => el.style.display = '');
+        document.querySelectorAll('.page-rendered').forEach(el => el.style.display = 'none');
+        document.getElementById('mode-label').textContent = 'Preview Mode';
+        document.getElementById('sb-mode').textContent    = '✏️ Edit';
+        document.getElementById('sb-mode').className      = 'badge edit';
+    }
+    applyAllPageStyles();
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRINT — zero double-margin
+// ═══════════════════════════════════════════════════════════
+function printDoc() {
+    syncSettingsFromUI();
+    const st = S.settings;
+
+    // Re-render all pages
+    S.pages.forEach(pg => {
+        if (pg.rawText && !pg.renderedHTML) pg.renderedHTML = renderMarkdown(pg.rawText);
+        const rendered = document.querySelector(`.page-rendered[data-pid="${pg.id}"]`);
+        if (rendered && pg.renderedHTML) rendered.innerHTML = pg.renderedHTML;
+    });
+
+    // Force preview display
+    document.querySelectorAll('.page-raw').forEach(el =>
+        el.style.setProperty('display','none','important'));
+    document.querySelectorAll('.page-rendered').forEach(el =>
+        el.style.setProperty('display','block','important'));
+
+    // @page rule: margins from settings, padding:0 in print CSS
+    const toIn  = px => (px/96).toFixed(3);
+    const mCSS  = `${toIn(st.mt)}in ${toIn(st.mr)}in ${toIn(st.mb)}in ${toIn(st.ml)}in`;
+    const sizeMap = {
+        'letter-portrait':'letter portrait','letter-landscape':'letter landscape',
+        'a4-portrait':'A4 portrait','a4-landscape':'A4 landscape',
+        'legal-portrait':'legal portrait','legal-landscape':'legal landscape',
+    };
+    const sizeStr = sizeMap[`${st.paper}-${st.orient}`] || 'A4 portrait';
+
+    const style = document.createElement('style');
+    style.id    = 'sd-print';
+    style.textContent = `
+        @page { size:${sizeStr}; margin:${mCSS}; }
+        .page-inner { padding:0 !important; }
+        .page-rendered { column-count:${st.cols} !important; }
+    `;
+    document.head.appendChild(style);
+
+    setTimeout(() => {
+        window.print();
+        document.getElementById('sd-print')?.remove();
+        // Restore
+        document.querySelectorAll('.page-raw').forEach(el => el.style.removeProperty('display'));
+        document.querySelectorAll('.page-rendered').forEach(el => el.style.removeProperty('display'));
+        if (S.mode === 'edit') {
+            document.querySelectorAll('.page-raw').forEach(el => el.style.display = '');
+            document.querySelectorAll('.page-rendered').forEach(el => el.style.display = 'none');
+        }
+    }, 400);
+}
+
+// ═══════════════════════════════════════════════════════════
+// PASTE HANDLER (smart detect markdown/latex)
+// ═══════════════════════════════════════════════════════════
+function handleRawPaste(e, raw, pid) {
+    const clip = e.clipboardData.getData('text/plain');
+    if (!clip) return;
+    e.preventDefault();
+
+    // Insert as plain text
+    const sel = window.getSelection();
+    if (sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const tn = document.createTextNode(clip);
+        range.insertNode(tn);
+        range.setStartAfter(tn); range.collapse(true);
+        sel.removeAllRanges(); sel.addRange(range);
+    } else { raw.innerText += clip; }
+
+    // Also mirror to sidebar prompt
+    const promptEl = document.getElementById('ai-prompt');
+    if (!promptEl.value.trim()) promptEl.value = clip;
+
+    const pg = S.pages.find(p => p.id === pid);
+    if (pg) pg.rawText = raw.innerText;
+
+    toast('📋 Text pasted — click ✨ Generate to format with AI');
+    updateStatus();
+}
+
+// ═══════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function setGenerating(on, msg='') {
+    const status  = document.getElementById('ai-status');
+    const btnGen  = document.getElementById('btn-generate');
+    const btnPage = document.getElementById('btn-generate-page');
+    const txt     = document.getElementById('ai-status-text');
+    status.classList.toggle('show', on);
+    if (msg && txt) txt.textContent = msg;
+    btnGen.disabled  = on;
+    btnPage.disabled = on;
+    document.getElementById('sb-mode').textContent =
+        on ? '✦ AI Working…' : (S.mode==='preview'?'👁 Preview':'✏️ Edit');
+}
+
+function updateStatus() {
+    const pages = S.pages.length;
+    document.getElementById('sb-pages').textContent = `${pages} page${pages!==1?'s':''}`;
+    let words = 0;
+    document.querySelectorAll('.page-raw').forEach(el => {
+        words += (el.innerText||'').trim().split(/\s+/).filter(Boolean).length;
+    });
+    document.getElementById('sb-words').textContent = `${words} word${words!==1?'s':''}`;
+}
+
+function toast(msg, ms=2800) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), ms);
+}
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Keyboard shortcut
+document.addEventListener('keydown', e => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && e.key.toLowerCase() === 'p') { e.preventDefault(); printDoc(); }
+    if (ctrl && e.key.toLowerCase() === 'enter') { e.preventDefault(); generateAllPages(); }
+    if (e.key === 'Escape') closeApiModal();
+});
+</script>
+</body>
+</html>
